@@ -1,0 +1,56 @@
+# =============================================================
+# Author : Aaditya Malla (CSCI 312 - Group 4)
+# File   : docker-compose.yml
+# Purpose: Automated deployment of the three containers on one
+#          user-defined bridge network. Start everything with:
+#              docker compose up -d --build
+# =============================================================
+name: delta-lake-stack
+
+services:
+  spark:                                  # M: Spark SQL + Delta Lake
+    build: ./spark
+    image: delta-spark:1.0
+    container_name: spark
+    environment:
+      DELTA_BUCKET: csci312-delta-aaditya-2026
+      AWS_REGION: us-east-2
+    ports:
+      - "127.0.0.1:4040:4040"             # Spark UI, only reachable through an SSH tunnel
+    networks: [deltanet]
+    healthcheck:                          # "healthy" once the Delta table is ready
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+
+  rocket:                                 # P: Rust (Rocket) back end
+    build: ./rocket
+    image: delta-rocket:1.0
+    container_name: rocket
+    environment:
+      SPARK_URL: http://spark:9000        # reaches Spark by container name
+    depends_on:
+      spark:
+        condition: service_healthy        # wait until Spark + Delta are ready
+    networks: [deltanet]
+    restart: unless-stopped
+
+  nginx:                                  # A: web server + reverse proxy
+    build: ./nginx
+    image: delta-nginx:1.0
+    container_name: nginx
+    environment:
+      ROCKET_HOST: rocket                 # reaches Rocket by container name
+    ports:
+      - "80:80"                           # the only public port
+    depends_on: [rocket]
+    networks: [deltanet]
+    restart: unless-stopped
+
+networks:
+  deltanet:
+    name: deltanet
+    driver: bridge

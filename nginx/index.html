@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<!--
+  =============================================================
+  Author : Aaditya Malla (CSCI 312 - Group 4)
+  File   : nginx/index.html
+  Purpose: Client side of the system. Sends queries that travel
+           NGINX -> Rocket -> Spark -> Delta Lake table in S3.
+  =============================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docker + Delta Lake</title>
+<style>
+  :root { --bg:#f4f6f8; --card:#fff; --text:#1f2328; --muted:#5b6470; --accent:#e8672a; --line:#e1e4e8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { background:#161b22; color:#fff; padding:24px 32px; }
+  header h1 { margin:0 0 6px; font-size:26px; }
+  header p { margin:0; color:#c9d1d9; font-size:14px; }
+  main { max-width:1100px; margin:24px auto; padding:0 16px; display:grid; gap:20px; grid-template-columns: 1fr 1fr; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px 20px; }
+  section.wide { grid-column: 1 / -1; }
+  h2 { margin:0 0 12px; font-size:18px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:8px 0 4px; }
+  input, select { width:100%; padding:8px; border:1px solid #c9ced4; border-radius:6px; font-size:14px; }
+  .row { display:flex; gap:10px; } .row > div { flex:1; }
+  button { margin-top:12px; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:9px 16px; font-size:14px; cursor:pointer; }
+  button.secondary { background:#3d444d; }
+  table { width:100%; border-collapse:collapse; font-size:14px; margin-top:10px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  .meta { font-family: Consolas, monospace; font-size:12px; color:var(--muted); background:#f6f8fa; border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:10px; white-space:pre-wrap; word-break:break-word; }
+  .msg { margin-top:10px; font-size:14px; }
+  .err { color:#b42318; } .ok { color:#1a7f37; }
+  a.ver { color:var(--accent); cursor:pointer; text-decoration:underline; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Docker + Delta Lake</h1>
+  <p>Client &rarr; NGINX &rarr; Rocket (Rust) &rarr; Spark SQL &rarr; Delta Lake table in AWS S3</p>
+</header>
+<main>
+  <section>
+    <h2>Search students</h2>
+    <label for="major">Major</label>
+    <select id="major">
+      <option value="">Any major</option>
+      <option>Computer Science</option><option>Mathematics</option>
+      <option>Physics</option><option>Biology</option>
+    </select>
+    <div class="row">
+      <div><label for="min_gpa">Minimum GPA</label><input id="min_gpa" type="number" min="0" max="4" step="0.1" placeholder="e.g. 3.5"></div>
+      <div><label for="version">Table version (time travel)</label><input id="version" type="number" min="0" step="1" placeholder="latest"></div>
+    </div>
+    <button id="searchBtn">Run query</button>
+  </section>
+
+  <section>
+    <h2>Add a student</h2>
+    <div class="row">
+      <div><label for="new_name">Name</label><input id="new_name" placeholder="e.g. Maya"></div>
+      <div><label for="new_major">Major</label><input id="new_major" placeholder="e.g. Physics"></div>
+    </div>
+    <div class="row">
+      <div><label for="new_gpa">GPA</label><input id="new_gpa" type="number" min="0" max="4" step="0.1" placeholder="0 - 4"></div>
+      <div><label for="new_year">Year</label><input id="new_year" type="number" min="1" max="4" step="1" placeholder="1 - 4"></div>
+    </div>
+    <button id="addBtn">Add (creates a new Delta version)</button>
+    <div id="addMsg" class="msg"></div>
+  </section>
+
+  <section class="wide">
+    <h2>Query results</h2>
+    <div id="results" class="msg">Run a query to see results.</div>
+  </section>
+
+  <section class="wide">
+    <h2>Delta Lake table history</h2>
+    <button id="historyBtn" class="secondary">Refresh history</button>
+    <div id="history" class="msg"></div>
+  </section>
+</main>
+
+<script>
+  // All values are inserted with textContent, never innerHTML, so data
+  // coming back from the table cannot inject HTML or scripts (XSS).
+  const $ = (id) => document.getElementById(id);
+
+  function el(tag, text) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; return e; }
+
+  function renderTable(target, columns, rows, onRowCell) {
+    const table = el("table"), head = el("tr");
+    columns.forEach(c => head.appendChild(el("th", c)));
+    table.appendChild(head);
+    rows.forEach(r => {
+      const tr = el("tr");
+      columns.forEach(c => {
+        const td = el("td");
+        if (onRowCell && onRowCell(c, r, td)) { /* custom cell */ } else td.textContent = r[c];
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+    target.appendChild(table);
+  }
+
+  async function callApi(url, options) {
+    const resp = await fetch(url, options);
+    let body;
+    try { body = await resp.json(); } catch { body = { error: "HTTP " + resp.status }; }
+    return { ok: resp.ok, body };
+  }
+
+  function showError(target, body) {
+    target.replaceChildren();
+    const msg = (body.result && body.result.error) || body.error || "Request failed";
+    target.appendChild(el("div", "Error: " + msg)).className = "err";
+  }
+
+  async function search() {
+    const params = new URLSearchParams();
+    const major = $("major").value, gpa = $("min_gpa").value.trim(), ver = $("version").value.trim();
+    if (major) params.set("major", major);
+    if (gpa) params.set("min_gpa", gpa);
+    if (ver) params.set("version", ver);
+    const out = $("results");
+    out.replaceChildren(el("div", "Querying the Delta table in S3..."));
+    const { ok, body } = await callApi("/api/students?" + params.toString());
+    if (!ok) return showError(out, body);
+    const r = body.result;
+    out.replaceChildren();
+    out.appendChild(el("div", r.count + " row(s), table version: " + r.version));
+    renderTable(out, ["id", "name", "major", "gpa", "year"], r.rows);
+    out.appendChild(el("div",
+      "Served by Rocket container: " + body.served_by + "\n" +
+      "Path: " + body.path + "\n" +
+      "Delta table: " + r.table + "\n" +
+      "Spark SQL: " + r.sql + "\n" +
+      "Parameters: " + JSON.stringify(r.params))).className = "meta";
+  }
+
+  async function addStudent() {
+    const msg = $("addMsg");
+    const payload = {
+      name: $("new_name").value.trim(), major: $("new_major").value.trim(),
+      gpa: parseFloat($("new_gpa").value), year: parseInt($("new_year").value, 10)
+    };
+    if (!payload.name || !payload.major || isNaN(payload.gpa) || isNaN(payload.year)) {
+      msg.replaceChildren();
+      msg.appendChild(el("div", "Please fill in all four fields.")).className = "err";
+      return;
+    }
+    msg.replaceChildren(el("div", "Writing to the Delta table in S3..."));
+    const { ok, body } = await callApi("/api/students", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+    if (!ok) return showError(msg, body);
+    msg.replaceChildren();
+    msg.appendChild(el("div", "Added student id " + body.result.added_id + ". A new table version was created.")).className = "ok";
+    loadHistory();
+  }
+
+  async function loadHistory() {
+    const out = $("history");
+    out.replaceChildren(el("div", "Loading history..."));
+    const { ok, body } = await callApi("/api/history");
+    if (!ok) return showError(out, body);
+    out.replaceChildren();
+    renderTable(out, ["version", "timestamp", "operation"], body.result.history, (col, row, td) => {
+      if (col !== "version") return false;
+      const a = el("a", String(row.version)); a.className = "ver";
+      a.title = "Query this version (time travel)";
+      a.onclick = () => { $("version").value = row.version; search(); window.scrollTo(0, 0); };
+      td.appendChild(a); return true;
+    });
+    out.appendChild(el("div", "Click a version number to query the table as it was at that version.")).className = "meta";
+  }
+
+  $("searchBtn").onclick = search;
+  $("addBtn").onclick = addStudent;
+  $("historyBtn").onclick = loadHistory;
+  loadHistory();
+</script>
+</body>
+</html>

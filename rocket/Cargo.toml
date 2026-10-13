@@ -1,0 +1,13 @@
+# =============================================================
+# Author : Aaditya Malla (CSCI 312 - Group 4)
+# File   : rocket/Cargo.toml
+# Purpose: Rust package manifest for the Rocket back end
+# =============================================================
+[package]
+name = "rocket-app"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+rocket = { version = "0.5.1", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
