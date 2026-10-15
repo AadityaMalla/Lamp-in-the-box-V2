@@ -1,5 +1,5 @@
 # =============================================================
-# Author : Aaditya Malla (CSCI 312 - Group 4)
+# Author : Aaditya Malla, Khadija Osman, Natoli Mayu
 # File   : spark/server.py
 # Purpose: Spark SQL service backed by a Delta Lake table stored
 #          in an AWS S3 bucket. Exposes a small JSON API that the
