@@ -1,5 +1,5 @@
 // =============================================================
-// Author : Aaditya Malla (CSCI 312 - Group 4)
+// Author : Aaditya Malla, Khadija Osman, Natoli Mayu
 // File   : rocket/src/main.rs
 // Purpose: Rust (Rocket) back end. Validates every request coming
 //          from the client (through NGINX) and forwards it to the
