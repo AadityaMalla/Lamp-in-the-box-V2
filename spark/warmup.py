@@ -1,5 +1,5 @@
 # =============================================================
-# Author : Aaditya Malla (CSCI 312 - Group 4)
+# Author : Aaditya Malla, Khadija Osman, Natoli Mayu
 # File   : spark/warmup.py
 # Purpose: Run at image build time to pre-download the Delta Lake
 #          and hadoop-aws (S3) jars into the image, so containers
