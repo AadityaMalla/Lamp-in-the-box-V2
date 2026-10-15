@@ -1,5 +1,5 @@
 # =============================================================
-# Author : Aaditya Malla (CSCI 312 - Group 4)
+# Author : Aaditya Malla, Khadija Osman, Natoli Mayu
 # File   : nginx/Dockerfile
 # Purpose: NGINX web server + reverse proxy image
 # =============================================================
