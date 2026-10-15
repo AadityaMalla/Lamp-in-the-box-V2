@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-# Author : Aaditya Malla (CSCI 312 - Group 4)
+# Author : Aaditya Malla, Khadija Osman, Natoli Mayu
 # File   : deploy.sh
 # Purpose: One-command automated deployment. Builds the images,
 #          starts the containers, waits until the whole chain
