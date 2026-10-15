@@ -1,5 +1,5 @@
 # =============================================================
-# Author : Aaditya Malla (CSCI 312 - Group 4)
+# Author : Aaditya Malla, Khadija Osman, Natoli Mayu
 # File   : nginx/default.conf.template
 # Purpose: Serve the client web page and reverse-proxy /api/ to
 #          the Rocket container. ${ROCKET_HOST} is filled in from
