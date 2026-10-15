@@ -1,5 +1,5 @@
 # =============================================================
-# Author : Aaditya Malla (CSCI 312 - Group 4)
+# Author : Aaditya Malla, Khadija Osman, Natoli Mayu
 # File   : rocket/Dockerfile
 # Purpose: Multi-stage build. Compile the Rust app, then ship only
 #          the binary on a small Debian image.
